@@ -37,6 +37,7 @@ def init_pinecone_client():
 initial_state = {
     "user_name": "",
     "user_id": "",
+    "step_no": 0,
     "pinecone_indices": ["movies-list", "music-list", "products-list"],
 }
 
@@ -47,6 +48,7 @@ async def main_async(userID):
     USER_ID = userID
 
     initial_state["user_id"] = USER_ID
+    initial_state["step_no"] = 0
     
     # ===== PART 4: Session Management - Find or Create =====
     # Check for existing sessions for this user

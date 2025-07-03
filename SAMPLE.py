@@ -1,16 +1,40 @@
-import os
+# import os
+# import google.generativeai as genai
+# from dotenv import load_dotenv
 
-def print_folder_structure(start_path, indent=""):
-    for root, dirs, files in os.walk(start_path):
-        level = root.replace(start_path, "").count(os.sep)
-        indent_space = "│   " * level
-        print(f"{indent_space}├── 📁 {os.path.basename(root)}/")
-        for f in files:
-            print(f"{indent_space}│   ├── 📄 {f}")
-        dirs[:] = sorted(dirs)  # Sort directories for consistent order
-        files[:] = sorted(files)  # Sort files as well
-        # Don't recurse here since os.walk handles it
+# # Load .env and API key
+# load_dotenv()
+# api_key = os.getenv("GOOGLE_API_KEY")
 
-# Example usage:
-print_folder_structure(".")
+# # Configure the API client
+# genai.configure(api_key=api_key)
+
+# # List available models
+# models = genai.list_models()
+
+# for model in models:
+#     print(f"Model: {model.name}")
+#     print(f"  Description: {model.description}")
+#     print(f"  Capabilities: {model.supported_generation_methods}")
+#     print("-" * 40)
+
+
+
+
+
+# import os
+# from dotenv import load_dotenv
+# # Get API key
+# load_dotenv()  # Loads variables from .env into environment
+# apiKey = os.environ.get("OPENAI_API_KEY")
+
+
+# import openai
+# from openai import OpenAI
+
+# client = OpenAI(api_key=apiKey) 
+
+# models = client.models.list()
+# for model in models.data:
+#     print(model.id)
 

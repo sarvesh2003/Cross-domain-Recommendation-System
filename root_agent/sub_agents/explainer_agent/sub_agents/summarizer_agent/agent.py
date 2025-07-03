@@ -59,5 +59,8 @@ IMPORTANT:
 - Summary will be used for future recommendations, so it must reflect the **essence** of user preferences—not just surface-level details.
 - Do not exceed character or line limits under any circumstance.
 - YOU SHOULD FOLLOW THE STRUCTURE MENTIONED ABOVE TO RETURN THE SUMMARY AND THE LISTS IN THE SAME RESPONSE. FAILING TO DO SO WILL RESULT IN AN ERROR.
+
+MUST DO: 
+- YOU MUST RETURN THE RESULT AND CONTROL BACK TO THE AGENT WHO CALLED YOU. DON'T TERMINATE WITHOUT DOING THIS.
 """
 )

@@ -6,12 +6,38 @@ import sqlite3
 import json
 
 from .sub_agents.summarizer_agent.agent import summarizer_agent
+from .sub_agents.recommendation_agent.agent import recommendation_agent
 
 from pinecone import Pinecone
 import os
+import litellm
 
 import sqlite3
 from google.adk.tools.tool_context import ToolContext
+
+litellm._turn_on_debug()
+
+def increment_step_no(tool_context: ToolContext) -> dict:
+    """Increment the current step number in the workflow.
+
+    Args:
+        tool_context: Context for accessing and updating session state
+
+    Returns:
+        A confirmation message with the updated step number
+    """
+    current_step = tool_context.state.get("step_no", 0)
+    new_step = current_step + 1
+    tool_context.state["step_no"] = new_step
+
+    print(f"--- Tool: increment_step_no called. Step incremented from {current_step} to {new_step} ---")
+
+    return {
+        "action": "increment_step_no",
+        "step_no": new_step,
+        "message": f"Step number incremented to {new_step}",
+    }
+
 
 def calculate_user_embeddings(activity_type: str, user_query: str, description: str, tool_context: ToolContext) -> dict:
     """
@@ -490,7 +516,11 @@ explainer_agent = Agent(
     instruction = """
 You are an explanation-processing agent with access to user activity tools and a summarization agent.
 
-Your task is to handle structured user queries that describe a recent action (such as watching a movie, purchasing a product, or listening to music), and update relevant user data and summaries accordingly.
+Your task is to handle structured user queries that describe a recent action (such as watching a movie, purchasing a product, or listening to music), and update relevant user data and summaries accordingly. Your main goal is to proceed with all the flows mentioned in the workflow below, ensuring that you follow each step sequentially without skipping any.
+After each step, record the result into a variable, then explicitly check if you have completed all 8 steps before finishing. At each step, print "Currently in step X" to indicate your progress, where X is the step number.
+
+Also, after every step completion, you **must** call the tool `increment_step_no(tool_context)` to update the step count.
+At the end of each step, check whether the returned `step_no` equals 9. If yes, stop the workflow immediately, as all 8 steps are now completed.
 
 Input Format:
 - Natural language query of the form: "I <action> <item> (source: <Platform>)"
@@ -505,6 +535,8 @@ Workflow:
 STEP - 1. **Parse and Infer Activity Type**:
    - Extract the item (e.g., "Small Soldiers") and source (e.g., "Amazon Prime") from the input.
    - Infer `activity_type` using the Source Mapping.
+   - Ask yourself whether you have any more steps to perform or not.
+   - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 2. **Map Activity Type to DB Field**:
    - Map `activity_type` to:
@@ -512,12 +544,16 @@ STEP - 2. **Map Activity Type to DB Field**:
      → "music" → `listened_music`
      → "product" → `products_purchased`
    - Call `update_user_activity(field, item, tool_context)`.
+   - Ask yourself whether you have any more steps to perform or not.
+   - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 3. **Activity Type to Summary Field Mapping**:
    - Map `activity_type` to summary field:
      → "movie" → `movie_pref_summary`
      → "music" → `music_pref_summary`
      → "product" → `product_pref_summary`
+   - Ask yourself whether you have any more steps to perform or not.
+   - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 4. **Fetch**:
     - First, fetch the current summary by using the `get_user_pref_summary(activity_type, tool_context)` tool where you pass the activity type as either movie/music/product. 
@@ -526,19 +562,25 @@ STEP - 4. **Fetch**:
         - `activity_type` is one of ["movie", "music", "product"]
         - `item_name` is the exact item string extracted from the user query (e.g., movie title or product name)
     - Store the `description` field from the tool response in a variable called `description_of_query`.
-    
+
     NOTE: USE THE TOOL `get_user_pref_summary(activity_type, tool_context)` TO GET THE CURRENT SUMMARY AND `get_item_description(activity_type, item_name, tool_context)` TO GET THE DESCRIPTION OF THE USER'S ITEM. ONCE WE GET BOTH THE SUMMARY AND DESCRIPTION, THEN ONLY YOU SHOULD MAKE THE CALL TO SUMMARIZER AGENT - summarizer_agent (YOU HAVE ACCESS TO THIS)
+    - Ask yourself whether you have any more steps to perform or not.
+    - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 5. **Summarize**:
     - Now, call the summarizer agent (`summarizer_agent`) with the following input tuple:
         → `(current_summary, user_query, description_of_query)`
     IMP: YOU HAVE ACCESS TO THE SUMMARIZER AGENT, SO YOU CAN CALL IT OR TRANSFER THE CONTROL TO IT.
+    - Ask yourself whether you have any more steps to perform or not.
+    - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 6. **Update Summary in DB**:
     - Use set_user_pref_summary(activity_type, new_summary, tool_context) to update the corresponding summary field (movie_pref_summary, music_pref_summary, or product_pref_summary) in the database.
         - `activity_type` is one of ["movie", "music", "product"]
         - `new_summary` is the summary returned by the summarizer agent.
     NOTE: TO UPDATE THE MOVIE PREFERENCE SUMMARY / MUSIC PREFERENCE SUMMARY / PRODUCT PREFERENCE SUMMARY, USE THE TOOL `set_user_pref_summary(activity_type, new_summary, tool_context)`.
+    - Ask yourself whether you have any more steps to perform or not.
+    - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 STEP - 7. **Recalculate Embeddings**:
    - Call `calculate_user_embeddings(activity_type, user_query, description_of_query, tool_context)` to refresh the user vector in Pinecone.
@@ -549,20 +591,121 @@ STEP - 7. **Recalculate Embeddings**:
        - products_purchased → `product_emb`
        - Weights = (count / total_count), obtained from the SQLite database.
    - Only the updated section and collective part are recomputed and written back.
+   - Ask yourself whether you have any more steps to perform or not.
+   - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
+
+STEP - 8. **Call Recommendation Agent**:
+   - Once you have updated the embeddings using `calculate_user_embeddings`, immediately trigger a recommendation request to the `recommendation_agent`.
+   - Use the same activity_type used throughout the previous steps as the base activity.
+   - Format the query as: "Recommend based on my recent activity (baseActivity)"
+       - Example: "Recommend based on my recent activity (movie)"
+   - Call the `recommendation_agent`, passing this formatted query and you must make sure this step is completed
+   - Ask yourself whether you have any more steps to perform or not.
+   - ✅ Then call: `increment_step_no(tool_context)` and check if `step_no == 9`. If yes, stop.
 
 Rules:
 - Always extract `item` and `source` accurately.
 - Do not generate explanations — only structured updates.
-- Perform all seven steps sequentially for each query - MUST REQUIREMENT
-
+- Perform all eight steps sequentially for each query - MUST REQUIREMENT
+- After each step, verify whether you have any remaining steps to perform or not. This will ensure that you do not skip any step.
 
 MUST TO FOLLOW INFO NO MATER WHAT: 
 - After calling any tool, you MUST use its output.
 - Store the value of 'value' from `get_user_pref_summary(...)` into a variable called `current_summary`.
 - Store the 'description' field from `get_item_description(...)` into a variable called `description_of_query`.
 - Once both variables are populated, call the `summarizer_agent` with: (current_summary, user_query, description_of_query)
-- MOST IMPORTANT OF ALL (FAILING TO DO SO WILL COST US MILLIONS): You MUST proceed through all 7 steps, even if some tool returns a success message. DO NOT stop after printing.
+- MOST IMPORTANT OF ALL (FAILING TO DO SO WILL COST US MILLIONS): You MUST proceed through all 8 steps, even if some tool returns a success message. DO NOT stop after printing.
 """,
-    tools=[update_user_activity, get_user_pref_summary, get_item_description, set_user_pref_summary, calculate_user_embeddings],
-    sub_agents=[summarizer_agent],
+#     instruction = """
+# You are an explanation-processing agent with access to user activity tools and a summarization agent.
+
+# Your task is to handle structured user queries that describe a recent action (such as watching a movie, purchasing a product, or listening to music), and update relevant user data and summaries accordingly. Your main goal is to proceed with all the flows mentioned in the workflow below, ensuring that you follow each step sequentially without skipping any.
+# After each step, record the result into a variable, then explicitly check if you have completed all 8 steps before finishing. At each step, print "Currently in step X" to indicate your progress, where X is the step number.
+
+# Input Format:
+# - Natural language query of the form: "I <action> <item> (source: <Platform>)"
+
+# Source Mapping:
+# - "Amazon Prime" → "movie"
+# - "Spotify" → "music"
+# - "Amazon" → "product"
+
+# Workflow:
+
+# STEP - 1. **Parse and Infer Activity Type**:
+#    - Extract the item (e.g., "Small Soldiers") and source (e.g., "Amazon Prime") from the input.
+#    - Infer `activity_type` using the Source Mapping.
+#    - Ask yourself whether you have any more steps to perform or not.
+
+# STEP - 2. **Map Activity Type to DB Field**:
+#    - Map `activity_type` to:
+#      → "movie" → `movies_watched`
+#      → "music" → `listened_music`
+#      → "product" → `products_purchased`
+#    - Call `update_user_activity(field, item, tool_context)`.
+#    - Ask yourself whether you have any more steps to perform or not.
+
+# STEP - 3. **Activity Type to Summary Field Mapping**:
+#    - Map `activity_type` to summary field:
+#      → "movie" → `movie_pref_summary`
+#      → "music" → `music_pref_summary`
+#      → "product" → `product_pref_summary`
+#    - Ask yourself whether you have any more steps to perform or not.
+     
+# STEP - 4. **Fetch**:
+#     - First, fetch the current summary by using the `get_user_pref_summary(activity_type, tool_context)` tool where you pass the activity type as either movie/music/product. 
+#     - Store the response from the `get_user_pref_summary(activity_type, tool_context)` tool call in `current_summary`.
+#     - Secondly, fetch the metadata-based description of the item using the tool `get_item_description(activity_type, item_name, tool_context)` where:
+#         - `activity_type` is one of ["movie", "music", "product"]
+#         - `item_name` is the exact item string extracted from the user query (e.g., movie title or product name)
+#     - Store the `description` field from the tool response in a variable called `description_of_query`.
+    
+#     NOTE: USE THE TOOL `get_user_pref_summary(activity_type, tool_context)` TO GET THE CURRENT SUMMARY AND `get_item_description(activity_type, item_name, tool_context)` TO GET THE DESCRIPTION OF THE USER'S ITEM. ONCE WE GET BOTH THE SUMMARY AND DESCRIPTION, THEN ONLY YOU SHOULD MAKE THE CALL TO SUMMARIZER AGENT - summarizer_agent (YOU HAVE ACCESS TO THIS)
+#     - Ask yourself whether you have any more steps to perform or not.
+# STEP - 5. **Summarize**:
+#     - Now, call the summarizer agent (`summarizer_agent`) with the following input tuple:
+#         → `(current_summary, user_query, description_of_query)`
+#     IMP: YOU HAVE ACCESS TO THE SUMMARIZER AGENT, SO YOU CAN CALL IT OR TRANSFER THE CONTROL TO IT.
+#     - Ask yourself whether you have any more steps to perform or not.
+
+# STEP - 6. **Update Summary in DB**:
+#     - Use set_user_pref_summary(activity_type, new_summary, tool_context) to update the corresponding summary field (movie_pref_summary, music_pref_summary, or product_pref_summary) in the database.
+#         - `activity_type` is one of ["movie", "music", "product"]
+#         - `new_summary` is the summary returned by the summarizer agent.
+#     NOTE: TO UPDATE THE MOVIE PREFERENCE SUMMARY / MUSIC PREFERENCE SUMMARY / PRODUCT PREFERENCE SUMMARY, USE THE TOOL `set_user_pref_summary(activity_type, new_summary, tool_context)`.
+#         - Ask yourself whether you have any more steps to perform or not.
+# STEP - 7. **Recalculate Embeddings**:
+#    - Call `calculate_user_embeddings(activity_type, user_query, description_of_query, tool_context)` to refresh the user vector in Pinecone.
+#    - The embedding vector has 4 parts (movie_emb, music_emb, product_emb, collective_emb), each 384-dim, stored as one concatenated 1536-dim vector in the "user-preference-vector" index.
+#    - `collective_emb` is a weighted average of the individual embeddings, with weights proportional to the number of items watched/listened/purchased:
+#        - movies_watched → `movie_emb`
+#        - listened_music → `music_emb`
+#        - products_purchased → `product_emb`
+#        - Weights = (count / total_count), obtained from the SQLite database.
+#    - Only the updated section and collective part are recomputed and written back.
+#    - Ask yourself whether you have any more steps to perform or not.
+# STEP - 8. **Call Recommendation Agent**:
+#    - Once you have updated the embeddings using `calculate_user_embeddings`, immediately trigger a recommendation request to the `recommendation_agent`.
+#    - Use the same activity_type used throughout the previous steps as the base activity.
+#    - Format the query as: "Recommend based on my recent activity (baseActivity)"
+#        - Example: "Recommend based on my recent activity (movie)"
+#    - Call the `recommendation_agent`, passing this formatted query and you must make sure this step is completed
+#    - Ask yourself whether you have any more steps to perform or not.
+   
+# Rules:
+# - Always extract `item` and `source` accurately.
+# - Do not generate explanations — only structured updates.
+# - Perform all eight steps sequentially for each query - MUST REQUIREMENT
+# - After each step, verify whether you have any remaining steps to perform or not. This will ensure that you do not skip any step.
+
+
+# MUST TO FOLLOW INFO NO MATER WHAT: 
+# - After calling any tool, you MUST use its output.
+# - Store the value of 'value' from `get_user_pref_summary(...)` into a variable called `current_summary`.
+# - Store the 'description' field from `get_item_description(...)` into a variable called `description_of_query`.
+# - Once both variables are populated, call the `summarizer_agent` with: (current_summary, user_query, description_of_query)
+# - MOST IMPORTANT OF ALL (FAILING TO DO SO WILL COST US MILLIONS): You MUST proceed through all 8 steps, even if some tool returns a success message. DO NOT stop after printing.
+# """,
+    tools=[update_user_activity, get_user_pref_summary, get_item_description, set_user_pref_summary, calculate_user_embeddings, increment_step_no],
+    sub_agents=[summarizer_agent, recommendation_agent],
 )

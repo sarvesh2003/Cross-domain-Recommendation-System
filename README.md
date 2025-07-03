@@ -12,3 +12,8 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+
+# set OPENAI_API_BASE=http://localhost:11434/v1
+# echo %OPENAI_API_BASE%
+

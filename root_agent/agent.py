@@ -10,7 +10,6 @@ from google.adk.agents.callback_context import CallbackContext
 from google.genai import types # For types.Content
 from typing import Optional
 from google.adk.models import LlmResponse, LlmRequest
-
 # litellm._turn_on_debug()
 
 
