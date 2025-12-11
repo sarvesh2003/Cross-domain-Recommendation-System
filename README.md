@@ -68,3 +68,4 @@ Agent Response:
 ```
 
 ### Sequence Diagram for an example interaction
+![alt text](https://github.com/sarvesh2003/Cross-domain-Recommendation-System/blob/main/sequence_diagram.png)
