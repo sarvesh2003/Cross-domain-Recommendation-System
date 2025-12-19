@@ -1,13 +1,135 @@
-## Agentic Cross-Domain Recommendation System
-An intelligent, conversational recommendation engine powered by Google ADK, Gemini 2.0 Flash, and Pinecone. This system utilizes a hierarchical multi-agent architecture to understand user activities (watching movies, listening to music, buying products) and generate cross-domain recommendations by maintaining a dynamic, multi-modal user preference vector.
+# Agentic Cross-Domain Recommendation Engine
 
-### Key Features
-- **Hierarchical Agent Architecture:** A root_agent coordinates specialized sub-agents for explaining logic (explainer_agent), summarization (summarizer_agent), and retrieval (recommendation_agent).
-- **Cross-Domain Vector Logic:** Uses a 1536-dimensional composite vector (combining Movie, Music, Product, and Collective embeddings) to find semantically related items across different categories.
-- **Dynamic User Profiling:**
-    - Textual Memory: Maintains structured summaries (e.g., "Loved Movies," "Did not like Products") in SQLite.
-    - Vector Memory: Updates Pinecone embeddings in real-time based on user sentiment.
-- **8-Step Logic Pipeline:** Enforces a strict workflow from parsing user intent to recalculating embeddings and fetching recommendations.
+A multi-agent recommendation system built with Google ADK and Gemini 2.0 Flash that generates personalized suggestions across Movies, Music, and Products by maintaining a unified user preference vector.
+
+## Problem Statement
+
+Traditional recommendation systems treat each domain independently, so movie preferences don’t affect product recommendations. This project enables **cross-domain recommendations** using a shared embedding space, allowing user interests to transfer across domains (e.g., recommending a telescope to someone loved *Interstellar*).
+
+
+## Architecture
+
+```
+User Query → Root Agent → Explainer Agent (8-step workflow)
+                              ↓
+                    ┌─────────┴─────────┐
+                    ↓                   ↓
+            Summarizer Agent    Recommendation Agent
+                    ↓                   ↓
+              SQLite (Text)      Pinecone (Vectors)
+```
+
+**Core Components:**
+- **Root Agent**: Session management and query routing
+- **Explainer Agent**: 8-step stateful workflow orchestrating the pipeline
+- **Summarizer Agent**: Converts natural language feedback → structured preference profiles
+- **Recommendation Agent**: Vector similarity search across 30K items
+
+## Key Technical Decisions
+
+| Challenge | Solution |
+|-----------|----------|
+| Cross-domain similarity | 1536-dim composite embedding (4×384): `[movie_vec, music_vec, product_vec, collective_vec]` |
+| Preference evolution | Weighted collective vector updated after each interaction |
+| Redundancy prevention | Metadata-based exclusion filters in Pinecone |
+| Sentiment tracking | Structured summaries with Loved/Okish/Disliked categorization |
+
+## System Flow
+
+![alt text](https://github.com/sarvesh2003/Cross-domain-Recommendation-System/blob/main/sequence_diagram.png)
+
+## Example Interaction
+
+```
+You: I just watched Interstellar and loved the space exploration aspect.
+
+Agent: Based on your interest in space exploration sci-fi, here are my recommendations:
+
+Movies:
+- The Martian (Sci-Fi, 2015) - "Bring Him Home"
+- Gravity (Sci-Fi, 2013) - "Don't Let Go"
+
+Music:
+- "Cornfield Chase" by Hans Zimmer
+- "Starman" by David Bowie
+
+Products:
+- Celestron PowerSeeker Telescope - $79.99 ⭐4.5
+- NASA Space Exploration Book - $24.99 ⭐4.8
+```
+
+
+**8-Step Processing Chain:**
+1. Parse user input & infer activity type
+2. Update domain-specific activity list (SQLite)
+3. Fetch item metadata from Pinecone
+4. Retrieve current preference summary
+5. Generate updated summary via Summarizer Agent
+6. Persist new summary to SQLite
+7. Recalculate weighted user embedding
+8. Query Recommendation Agent for top-k suggestions
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Agent Orchestration | Google ADK |
+| LLM | Gemini 2.0 Flash |
+| Vector Database | Pinecone (4 indices) |
+| Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
+| Persistence | SQLite + JSON serialization |
+| Language | Python 3.10+ |
+
+## Project Structure
+
+```
+├── main.py                     # Entry point & session management
+├── helper.py                   # Utilities & state management
+├── root_agent/
+│   └── agent.py               # Query routing & user identification
+├── sub_agents/
+│   ├── explainer_agent/       # 8-step workflow orchestration
+│   ├── summarizer_agent/      # NL → structured preference conversion
+│   └── recommendation_agent/  # Vector retrieval & ranking
+├── databases/
+│   └── user_activity.db       # SQLite persistence
+└── notebooks/
+    ├── movie-recommendation-index-generation.ipynb
+    ├── music-recommendation-index-generation.ipynb
+    └── product-recommendation-index-generation.ipynb
+```
+
+## Quick Start
+
+```bash
+# 1. Clone & setup
+git clone https://github.com/yourusername/cross-domain-rec-engine.git
+cd cross-domain-rec-engine
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure environment
+cp .env.example .env
+# Add your PINECONE_API_KEY and GOOGLE_API_KEY
+
+# 3. Initialize databases (first-time setup)
+python user_activity_db_builder.py
+python user_pref_index_generation.py
+
+# 4. Run
+python main.py
+```
+
+## Future Improvements
+
+- [ ] Add evaluation metrics (precision@k, diversity)
+- [ ] Implement A/B testing framework
+- [ ] Add conversation memory beyond single session
+- [ ] Batch embedding updates for efficiency
+- [ ] Deploy as API with FastAPI
+
+
+
 
 ### Tech Stack
 - **Orchestration:** Google ADK (Agent Development Kit)
@@ -45,27 +167,3 @@ An intelligent, conversational recommendation engine powered by Google ADK, Gemi
     - movie-recommendation-index-generation.ipynb -> Index: movies-list
     - music-recommendation-index-generation.ipynb -> Index: music-list
     - product-recommendation-index-generation.ipynb -> Index: products-list
-
-### An Example Interaction
-```text
-> Enter your user ID: user_12345
-
-Welcome to Recommendation Engine Agent Chat!
-
-You: I just watched Interstellar and I absolutely loved the space exploration aspect.
-
-[System]: 
-1. Updates 'movies_watched' in SQLite.
-2. Summarizer adds "Loves Sci-Fi/Space" to profile.
-3. User Vector updated in Pinecone.
-4. Recommendation Agent queries Music and Products.
-
-Agent Response: 
-"Since you loved 'Interstellar', here are some recommendations:
-- Music: 'Cornfield Chase' by Hans Zimmer (Soundtrack)
-- Product: Celestron Telescope (Space exploration gear)
-- Movie: The Martian"
-```
-
-### Sequence Diagram for an example interaction
-![alt text](https://github.com/sarvesh2003/Cross-domain-Recommendation-System/blob/main/sequence_diagram.png)
